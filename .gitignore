@@ -1,0 +1,8 @@
+DIV2K/
+__pycache__/
+encoder
+decoder
+plano_bit_*.txt
+plano_bit_*_encoded.bin
+saida_*.txt
+resultado_planos_bits.png
