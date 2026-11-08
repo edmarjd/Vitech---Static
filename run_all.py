@@ -11,13 +11,13 @@ from collections import deque
 
 from context_model import ContextModel, NUM_CONTEXTS_1D
 
-
 # ---------------------------------------------------------------------------
 # rANS primitivos
 # ---------------------------------------------------------------------------
 
+
 def _C_rANS(s, state, counts):
-    M  = counts[0] + counts[1]
+    M = counts[0] + counts[1]
     cs = sum(counts[:s])
     fs = counts[s]
     return (state // fs) * M + cs + (state % fs)
@@ -32,10 +32,10 @@ def _encode_symbol(state, s, counts, bitstream):
 
 
 def _D_rANS(state, counts):
-    M    = counts[0] + counts[1]
+    M = counts[0] + counts[1]
     slot = state % M
-    s    = 1 if slot >= counts[0] else 0
-    cs   = [0, counts[0]]
+    s = 1 if slot >= counts[0] else 0
+    cs = [0, counts[0]]
     prev = (state // M) * counts[s] + slot - cs[s]
     return s, prev
 
@@ -43,6 +43,7 @@ def _D_rANS(state, counts):
 # ---------------------------------------------------------------------------
 # Leitura de símbolos
 # ---------------------------------------------------------------------------
+
 
 def load_symbols(path):
     with open(path, "r") as f:
@@ -56,6 +57,7 @@ def load_symbols(path):
 # ---------------------------------------------------------------------------
 # Pipeline completo para um arquivo (contexto 1D lookahead)
 # ---------------------------------------------------------------------------
+
 
 def run_one(path, recalc_window):
     symbols = load_symbols(path)
@@ -74,7 +76,7 @@ def run_one(path, recalc_window):
     for b in range(n_blocks):
         counts = [[1, 1] for _ in range(n_ctx)]
         start = b * rw
-        end   = min(start + rw, n)
+        end = min(start + rw, n)
         for i in range(start, end):
             ctx = get_ctx(i)
             counts[ctx][symbols[i]] += 1
@@ -84,22 +86,22 @@ def run_one(path, recalc_window):
     # -----------------------------------------------------------------------
     # ENCODE (ordem direta 0 → n-1)
     # -----------------------------------------------------------------------
-    ctx0    = get_ctx(0)
+    ctx0 = get_ctx(0)
     counts0 = model_enc.get_counts(ctx0, 0)
-    state   = counts0[0] + counts0[1]
+    state = counts0[0] + counts0[1]
     bitstream = []
 
     t0 = time.time()
     for i in range(n):
         ctx = get_ctx(i)
         blk = i // rw if rw > 0 else None
-        c   = model_enc.get_counts(ctx, blk)
+        c = model_enc.get_counts(ctx, blk)
         state = _encode_symbol(state, symbols[i], c, bitstream)
     t_enc = time.time() - t0
 
     bitstream_str = "".join(map(str, bitstream))
-    final_state   = state
-    hdr_hex       = model_enc.serialize_static_headers()
+    final_state = state
+    hdr_hex = model_enc.serialize_static_headers()
 
     # -----------------------------------------------------------------------
     # DECODE (ordem inversa n-1 → 0, contexto 1D: last_decoded)
@@ -107,47 +109,47 @@ def run_one(path, recalc_window):
     model_dec = ContextModel(mode="static", num_contexts=n_ctx, recalc_window=rw)
     model_dec.load_static_headers(hdr_hex)
 
-    bits_q       = deque(map(int, bitstream_str[::-1]))
-    decoded      = [0] * n
-    state        = final_state
+    bits_q = deque(map(int, bitstream_str[::-1]))
+    decoded = [0] * n
+    state = final_state
     last_decoded = 0
 
     t0 = time.time()
     for i in range(n - 1, -1, -1):
         ctx = last_decoded
         blk = i // rw if rw > 0 else None
-        c   = model_dec.get_counts(ctx, blk)
+        c = model_dec.get_counts(ctx, blk)
         s, prev = _D_rANS(state, c)
         M = c[0] + c[1]
         while prev < M and bits_q:
             prev = (prev << 1) | bits_q.popleft()
-        state        = prev
-        decoded[i]   = s
+        state = prev
+        decoded[i] = s
         last_decoded = s
     t_dec = time.time() - t0
 
-    ok = (decoded == symbols)
+    ok = decoded == symbols
 
     # Métricas
-    bits_bs    = len(bitstream_str)
+    bits_bs = len(bitstream_str)
     bits_state = final_state.bit_length() if final_state > 0 else 1
-    bits_hdr   = model_enc.header_overhead_bits()
-    bits_pad   = model_enc.padding_bits()
+    bits_hdr = model_enc.header_overhead_bits()
+    bits_pad = model_enc.padding_bits()
     bits_total = bits_bs + bits_state + bits_hdr + bits_pad
     taxa = (1.0 - bits_total / n) * 100 if n > 0 else 0.0
 
     return {
-        "n":          n,
-        "n_blocks":   n_blocks,
-        "bits_bs":    bits_bs,
+        "n": n,
+        "n_blocks": n_blocks,
+        "bits_bs": bits_bs,
         "bits_state": bits_state,
-        "bits_hdr":   bits_hdr,
-        "bits_pad":   bits_pad,
+        "bits_hdr": bits_hdr,
+        "bits_pad": bits_pad,
         "bits_total": bits_total,
-        "taxa":       taxa,
-        "decode_ok":  ok,
-        "t_enc":      t_enc,
-        "t_dec":      t_dec,
+        "taxa": taxa,
+        "decode_ok": ok,
+        "t_enc": t_enc,
+        "t_dec": t_dec,
     }
 
 
@@ -155,11 +157,17 @@ def run_one(path, recalc_window):
 # Main
 # ---------------------------------------------------------------------------
 
+
 def main():
     parser = argparse.ArgumentParser(
-        description="Executa encoder/decoder em todos os inputs e planos de bits")
-    parser.add_argument("--recalc-window", type=int, default=1000,
-                        help="Tamanho do bloco para recalibração (padrão: 1000)")
+        description="Executa encoder/decoder em todos os inputs e planos de bits"
+    )
+    parser.add_argument(
+        "--recalc-window",
+        type=int,
+        default=1000,
+        help="Tamanho do bloco para recalibração (padrão: 1000)",
+    )
     args = parser.parse_args()
     rw = args.recalc_window
 
@@ -209,8 +217,12 @@ def main():
             continue
         r = run_one(path, rw)
         print_row("INPUT_" + str(i), r)
-        g_n += r["n"]; g_bs += r["bits_bs"]; g_state += r["bits_state"]
-        g_hdr += r["bits_hdr"]; g_pad += r["bits_pad"]; g_total += r["bits_total"]
+        g_n += r["n"]
+        g_bs += r["bits_bs"]
+        g_state += r["bits_state"]
+        g_hdr += r["bits_hdr"]
+        g_pad += r["bits_pad"]
+        g_total += r["bits_total"]
     print_global(g_n, g_bs, g_state, g_hdr, g_pad, g_total)
 
     # --- PLANOS DE BITS ---
@@ -229,8 +241,12 @@ def main():
             continue
         r = run_one(path, rw)
         print_row("PLANO_" + str(p), r)
-        g_n += r["n"]; g_bs += r["bits_bs"]; g_state += r["bits_state"]
-        g_hdr += r["bits_hdr"]; g_pad += r["bits_pad"]; g_total += r["bits_total"]
+        g_n += r["n"]
+        g_bs += r["bits_bs"]
+        g_state += r["bits_state"]
+        g_hdr += r["bits_hdr"]
+        g_pad += r["bits_pad"]
+        g_total += r["bits_total"]
     print_global(g_n, g_bs, g_state, g_hdr, g_pad, g_total)
 
     print(f"\n{'=' * W}")

@@ -1,30 +1,25 @@
+NUM_CONTEXTS_1D = 2  # 0 e 1 (bit anterior/próximo)
 
-NUM_CONTEXTS_1D = 2   # 0 e 1 (bit anterior/próximo)
-
-PRECISION_BITS = 5          # bits de precisão
-PRECISION      = 1 << PRECISION_BITS  # 32
+PRECISION_BITS = 5  # bits de precisão
+PRECISION = 1 << PRECISION_BITS  # 32
 
 
 class ContextModel:
 
-
-    def __init__(self, mode: str = "static", num_contexts: int = NUM_CONTEXTS_1D,
-                 recalc_window: int = 1000):
+    def __init__(
+        self, mode: str = "static", num_contexts: int = NUM_CONTEXTS_1D, recalc_window: int = 1000
+    ):
         if mode != "static":
             raise ValueError("Único modo suportado: 'static'")
-        self.mode          = mode
-        self.num_contexts  = num_contexts
+        self.mode = mode
+        self.num_contexts = num_contexts
         self.recalc_window = recalc_window
-        self._sym_count    = 0
+        self._sym_count = 0
         self._headers: list[list[int]] = []
-        self._win_counts   = [[1, 1] for _ in range(num_contexts)]
+        self._win_counts = [[1, 1] for _ in range(num_contexts)]
         # Prior de Laplace inicial
-        self._freq         = [[1, 1] for _ in range(num_contexts)]
-        self._block_freqs  = []
-
-
-
-
+        self._freq = [[1, 1] for _ in range(num_contexts)]
+        self._block_freqs = []
 
     def set_block_freqs(self, block_freqs: list) -> None:
         """Define tabelas de frequência separadas por bloco."""
@@ -33,7 +28,6 @@ class ContextModel:
         self._no_recalc = True
         if block_freqs:
             self._freq = block_freqs[0]
-
 
     def get_counts(self, ctx: int, block_idx: int = None) -> list[int]:
         """Retorna [c0, c1] para uso no C_rANS / D_rANS."""
@@ -76,9 +70,9 @@ class ContextModel:
             self._block_freqs = []
             return
         n_bits = len(hex_str) * 4
-        val    = int(hex_str, 16)
-        bits   = [(val >> (n_bits - 1 - i)) & 1 for i in range(n_bits)]
-        bph    = self.num_contexts * PRECISION_BITS
+        val = int(hex_str, 16)
+        bits = [(val >> (n_bits - 1 - i)) & 1 for i in range(n_bits)]
+        bph = self.num_contexts * PRECISION_BITS
         self._headers = []
         pos = 0
         while pos + bph <= len(bits):
@@ -104,15 +98,17 @@ class ContextModel:
         else:
             # BUG8: cabeçalho corrompido ou vazio — avisa e mantém prior de Laplace
             import warnings
+
             warnings.warn(
                 "load_static_headers: nenhum bloco válido encontrado no cabeçalho hex. "
                 "Usando prior de Laplace [[1,1],[1,1]]. A decodificação pode estar errada.",
-                RuntimeWarning, stacklevel=2
+                RuntimeWarning,
+                stacklevel=2,
             )
         self._no_recalc = True
 
     def header_overhead_bits(self) -> int:
-        """Bits de overhead (num_blocos × num_contexts × 12 bits)."""
+        """Bits de overhead (num_blocos × num_contexts × PRECISION_BITS (5 bits))."""
         n_blocks = max(1, len(self._block_freqs))
         return n_blocks * self.num_contexts * PRECISION_BITS
 
@@ -125,14 +121,13 @@ class ContextModel:
         remainder = raw % 8
         return (8 - remainder) % 8
 
-
     def _normalize(self, counts: list[list[int]]) -> list[list[int]]:
         """Normaliza contagens para soma = PRECISION; garante c0, c1 >= 1."""
         result = []
         for c0, c1 in counts:
             total = c0 + c1
-            c0n   = round(c0 * PRECISION / total)
-            c0n   = max(1, min(PRECISION - 1, c0n))
+            c0n = round(c0 * PRECISION / total)
+            c0n = max(1, min(PRECISION - 1, c0n))
             result.append([c0n, PRECISION - c0n])
         return result
 
